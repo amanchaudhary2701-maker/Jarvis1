@@ -1,224 +1,203 @@
 package com.example.jarvisai
 
-import android.app.*
+import android.Manifest
+import android.animation.ValueAnimator
+import android.content.Context
 import android.content.Intent
-import android.content.pm.ServiceInfo
-import android.net.Uri
-import android.os.*
-import android.provider.ContactsContract
-import android.speech.RecognitionListener
-import android.speech.RecognizerIntent
-import android.speech.SpeechRecognizer
-import android.speech.tts.TextToSpeech
-import okhttp3.*
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.RequestBody.Companion.toRequestBody
-import org.json.JSONArray
-import org.json.JSONObject
-import java.io.IOException
-import java.util.Locale
+import android.graphics.*
+import android.graphics.drawable.GradientDrawable
+import android.os.Build
+import android.os.Bundle
+import android.view.Gravity
+import android.view.View
+import android.view.animation.LinearInterpolator
+import android.widget.Button
+import android.widget.LinearLayout
+import android.widget.TextView
+import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
+import kotlin.math.sin
 
-class JarvisService : Service(), TextToSpeech.OnInitListener {
+class MainActivity : AppCompatActivity() {
 
-    private lateinit var speechRecognizer: SpeechRecognizer
-    private lateinit var tts: TextToSpeech
-    private val mainHandler = Handler(Looper.getMainLooper())
-    private val client = OkHttpClient()
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        supportActionBar?.hide()
 
-    private val apiKey = "AQ.Ab8RN6JWH6cIOlov2cgCXKch50esxD-pVloBAk7dlbRk-LgVXQ"
-
-    override fun onCreate() {
-        super.onCreate()
-        tts = TextToSpeech(this, this)
-        setupSpeechRecognizer()
-        startForegroundNotification()
-    }
-
-    private fun startForegroundNotification() {
-        val channelId = "jarvis_channel"
-        val channel = NotificationChannel(channelId, "Jarvis Assistant", NotificationManager.IMPORTANCE_LOW)
-        getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
-
-        val notification = Notification.Builder(this, channelId)
-            .setContentTitle("Jarvis Active")
-            .setContentText("Background mein 'Hello Jarvis' sun raha hoon...")
-            .setSmallIcon(android.R.drawable.ic_btn_speak_now)
-            .build()
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(1, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
-        } else {
-            startForeground(1, notification)
-        }
-    }
-
-    private fun setupSpeechRecognizer() {
-        speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)
-        speechRecognizer.setRecognitionListener(object : RecognitionListener {
-            override fun onResults(results: Bundle?) {
-                val spoken = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                    ?.firstOrNull()?.lowercase(Locale.ROOT) ?: ""
-
-                if (spoken.contains("hello") || spoken.contains("jarvis")) {
-                    val cmd = spoken.replace(Regex("(hello|hey|hi|jarvis)"), "").trim()
-                    if (cmd.isNotEmpty()) {
-                        handleCommand(cmd)
-                    } else {
-                        speak("Ji sir, boliye kya karna hai?")
-                    }
-                }
-                restartListening(1000)
-            }
-
-            override fun onError(error: Int) {
-                restartListening(1200)
-            }
-
-            override fun onReadyForSpeech(params: Bundle?) {}
-            override fun onBeginningOfSpeech() {}
-            override fun onRmsChanged(rmsdB: Float) {}
-            override fun onBufferReceived(buffer: ByteArray?) {}
-            override fun onEndOfSpeech() {}
-            override fun onPartialResults(partialResults: Bundle?) {}
-            override fun onEvent(eventType: Int, params: Bundle?) {}
-        })
-        startListening()
-    }
-
-    private fun startListening() {
-        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "en-IN")
-        }
-        speechRecognizer.startListening(intent)
-    }
-
-    private fun restartListening(delayMs: Long) {
-        mainHandler.postDelayed({ startListening() }, delayMs)
-    }
-
-    private fun handleCommand(cmd: String) {
-        when {
-            cmd.contains("instagram") || cmd.contains("insta") -> {
-                speak("Instagram open kar raha hoon.")
-                openApp("com.instagram.android", "https://www.instagram.com/")
-            }
-            cmd.contains("youtube") -> {
-                speak("YouTube open kar raha hoon.")
-                openApp("com.google.android.youtube", "https://www.youtube.com/")
-            }
-            cmd.contains("whatsapp") -> {
-                speak("WhatsApp open kar raha hoon.")
-                openApp("com.whatsapp", "https://wa.me/")
-            }
-            cmd.contains("gmail") || cmd.contains("email") -> {
-                speak("Gmail open kar raha hoon.")
-                openApp("com.google.android.gm", "https://mail.google.com/")
-            }
-            cmd.contains("camera") -> {
-                speak("Camera open kar raha hoon.")
-                val intent = Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE)
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                startActivity(intent)
-            }
-            cmd.contains("call") || cmd.contains("phone") -> {
-                val target = cmd.replace(Regex("\\b(call|phone|lagao|karo|ko|ke|pass|paas)\\b"), "").trim()
-                callContact(target)
-            }
-            else -> askGemini(cmd)
-        }
-    }
-
-    private fun openApp(packageName: String, fallbackUrl: String) {
-        val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
-        if (launchIntent != null) {
-            launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            startActivity(launchIntent)
-        } else {
-            val webIntent = Intent(Intent.ACTION_VIEW, Uri.parse(fallbackUrl))
-            webIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            startActivity(webIntent)
-        }
-    }
-
-    private fun callContact(targetName: String) {
-        if (targetName.length < 2) {
-            speak("Kisko call lagani hai, naam boliye sir.")
-            return
-        }
-        val cursor = contentResolver.query(
-            ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
-            arrayOf(
-                ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
-                ContactsContract.CommonDataKinds.Phone.NUMBER
-            ), null, null, null
+        val permissions = mutableListOf(
+            Manifest.permission.RECORD_AUDIO,
+            Manifest.permission.CALL_PHONE,
+            Manifest.permission.READ_CONTACTS
         )
-        cursor?.use {
-            while (it.moveToNext()) {
-                val name = it.getString(0)?.lowercase(Locale.ROOT) ?: ""
-                val number = it.getString(1) ?: ""
-                if (name.contains(targetName)) {
-                    speak("$name ko call laga raha hoon.")
-                    val callIntent = Intent(Intent.ACTION_CALL, Uri.parse("tel:$number"))
-                    callIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    startActivity(callIntent)
-                    return
-                }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            permissions.add(Manifest.permission.POST_NOTIFICATIONS)
+        }
+        ActivityCompat.requestPermissions(this, permissions.toTypedArray(), 101)
+
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setBackgroundColor(Color.parseColor("#050A14"))
+            setPadding(60, 100, 60, 100)
+        }
+
+        val title = TextView(this).apply {
+            text = "J.A.R.V.I.S  AI"
+            textSize = 26f
+            setTextColor(Color.parseColor("#00F0FF"))
+            typeface = Typeface.DEFAULT_BOLD
+            letterSpacing = 0.25f
+            gravity = Gravity.CENTER
+        }
+
+        val statusText = TextView(this).apply {
+            text = "3D Neural Core Ready"
+            textSize = 14f
+            setTextColor(Color.parseColor("#7AA2C4"))
+            gravity = Gravity.CENTER
+            setPadding(0, 12, 0, 40)
+        }
+
+        val orbView = Jarvis3DOrbView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(720, 720)
+        }
+
+        val startBtn = Button(this).apply {
+            text = "ACTIVATE JARVIS"
+            setTextColor(Color.parseColor("#050A14"))
+            textSize = 16f
+            typeface = Typeface.DEFAULT_BOLD
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#00F0FF"))
+                cornerRadius = 50f
+            }
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                140
+            ).apply { topMargin = 60 }
+
+            setOnClickListener {
+                startForegroundService(Intent(this@MainActivity, JarvisService::class.java))
+                statusText.text = "Background Active — Boliye 'Jarvis'"
+                orbView.setActive(true)
             }
         }
-        speak("Yeh naam contacts mein nahi mila sir.")
+
+        val stopBtn = Button(this).apply {
+            text = "DEACTIVATE"
+            setTextColor(Color.parseColor("#FF4D6D"))
+            textSize = 15f
+            typeface = Typeface.DEFAULT_BOLD
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#111B2E"))
+                setStroke(3, Color.parseColor("#FF4D6D"))
+                cornerRadius = 50f
+            }
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                130
+            ).apply { topMargin = 30 }
+
+            setOnClickListener {
+                stopService(Intent(this@MainActivity, JarvisService::class.java))
+                statusText.text = "Jarvis Offline"
+                orbView.setActive(false)
+            }
+        }
+
+        root.addView(title)
+        root.addView(statusText)
+        root.addView(orbView)
+        root.addView(startBtn)
+        root.addView(stopBtn)
+        setContentView(root)
+    }
+}
+
+class Jarvis3DOrbView(context: Context) : View(context) {
+    private var angle = 0f
+    private var pulse = 0f
+    private var isActive = false
+
+    private val ringPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = 6f
+        color = Color.parseColor("#00F0FF")
     }
 
-    private fun askGemini(question: String) {
-        val url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=$apiKey"
-        val prompt = "Tum Jarvis ho. Jawaab chhota (1-2 line) Hinglish mein do, bina emojis ke. Sawaal: $question"
-        val jsonBody = JSONObject().put(
-            "contents", JSONArray().put(
-                JSONObject().put("parts", JSONArray().put(JSONObject().put("text", prompt)))
-            )
+    private val dashedPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = 8f
+        color = Color.parseColor("#00A8FF")
+        pathEffect = DashPathEffect(floatArrayOf(28f, 18f), 0f)
+    }
+
+    private val corePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+    }
+
+    init {
+        ValueAnimator.ofFloat(0f, 360f).apply {
+            duration = 5000
+            repeatCount = ValueAnimator.INFINITE
+            interpolator = LinearInterpolator()
+            addUpdateListener {
+                angle = it.animatedValue as Float
+                pulse = sin(Math.toRadians(angle.toDouble() * 2)).toFloat()
+                invalidate()
+            }
+            start()
+        }
+    }
+
+    fun setActive(active: Boolean) {
+        isActive = active
+        invalidate()
+    }
+
+    override fun onDraw(canvas: Canvas) {
+        super.onDraw(canvas)
+        val cx = width / 2f
+        val cy = height / 2f
+        val baseRadius = width * 0.34f + (pulse * if (isActive) 16f else 6f)
+
+        // Glowing 3D Core
+        corePaint.shader = RadialGradient(
+            cx, cy, baseRadius * 0.75f,
+            intArrayOf(
+                Color.parseColor("#CC00F0FF"),
+                Color.parseColor("#440077FF"),
+                Color.TRANSPARENT
+            ),
+            floatArrayOf(0f, 0.55f, 1f),
+            Shader.TileMode.CLAMP
         )
-        val request = Request.Builder()
-            .url(url)
-            .post(jsonBody.toString().toRequestBody("application/json".toMediaType()))
-            .build()
+        canvas.drawCircle(cx, cy, baseRadius * 0.75f, corePaint)
 
-        client.newCall(request).enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) {
-                speak("Internet mein koi dikkat hai sir.")
-            }
-            override fun onResponse(call: Call, response: Response) {
-                val body = response.body?.string() ?: ""
-                try {
-                    val reply = JSONObject(body)
-                        .getJSONArray("candidates").getJSONObject(0)
-                        .getJSONObject("content").getJSONArray("parts")
-                        .getJSONObject(0).getString("text")
-                    speak(reply)
-                } catch (e: Exception) {
-                    speak("API key check kijiye sir.")
-                }
-            }
-        })
+        // 3D Gyroscopic Ring 1
+        canvas.save()
+        canvas.translate(cx, cy)
+        canvas.rotate(angle)
+        canvas.scale(1f, 0.42f)
+        ringPaint.alpha = 220
+        canvas.drawCircle(0f, 0f, baseRadius, ringPaint)
+        canvas.restore()
+
+        // 3D Gyroscopic Ring 2
+        canvas.save()
+        canvas.translate(cx, cy)
+        canvas.rotate(-angle * 1.3f + 60f)
+        canvas.scale(0.45f, 1f)
+        ringPaint.alpha = 180
+        canvas.drawCircle(0f, 0f, baseRadius * 0.92f, ringPaint)
+        canvas.restore()
+
+        // 3D Gyroscopic Ring 3 (Dashed Orbit)
+        canvas.save()
+        canvas.translate(cx, cy)
+        canvas.rotate(angle * 0.8f + 120f)
+        canvas.scale(1f, 0.65f)
+        canvas.drawCircle(0f, 0f, baseRadius * 1.08f, dashedPaint)
+        canvas.restore()
     }
-
-    private fun speak(text: String) {
-        mainHandler.post {
-            tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, null)
-        }
-    }
-
-    override fun onInit(status: Int) {
-        if (status == TextToSpeech.SUCCESS) {
-            tts.language = Locale("en", "IN")
-            speak("Jarvis app background mein ready hai sir.")
-        }
-    }
-
-    override fun onDestroy() {
-        speechRecognizer.destroy()
-        tts.shutdown()
-        super.onDestroy()
-    }
-
-    override fun onBind(intent: Intent?): IBinder? = null
 }
