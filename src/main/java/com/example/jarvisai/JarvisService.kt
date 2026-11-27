@@ -41,7 +41,10 @@ class JarvisService : Service(), TextToSpeech.OnInitListener {
     private var lastCommand = ""
     private var lastCommandTime = 0L
 
-    private val apiKey = "AQ.Ab8RN6JWH6cIOlov2cgCXKch50esxD-pVloBAk7dlbRk-LgVXQ"
+    private fun getApiKey(): String {
+        val prefs = getSharedPreferences("jarvis_prefs", Context.MODE_PRIVATE)
+        return prefs.getString("gemini_api_key", "") ?: ""
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -99,11 +102,16 @@ class JarvisService : Service(), TextToSpeech.OnInitListener {
         speechRecognizer.setRecognitionListener(object : RecognitionListener {
             override fun onResults(results: Bundle?) {
                 isListening = false
+                if (audioManager.isMusicActive && !isAwakeForCommand) {
+                    restartListening(2500)
+                    return
+                }
+
                 val spoken = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                     ?.firstOrNull()?.lowercase(Locale.ROOT)?.trim() ?: ""
 
                 if (spoken.isEmpty()) {
-                    restartListening(1200)
+                    restartListening(1400)
                     return
                 }
 
@@ -128,7 +136,7 @@ class JarvisService : Service(), TextToSpeech.OnInitListener {
                         speakAndListenOnce("Ji sir, boliye kya karna hai?")
                     }
                 } else {
-                    restartListening(1200)
+                    restartListening(1400)
                 }
             }
 
@@ -138,7 +146,7 @@ class JarvisService : Service(), TextToSpeech.OnInitListener {
                     isAwakeForCommand = false
                     goToSleep("Koi command nahi mila, mic band kar diya hai.")
                 } else if (!isSpeaking) {
-                    restartListening(1600)
+                    restartListening(1800)
                 }
             }
 
@@ -154,6 +162,14 @@ class JarvisService : Service(), TextToSpeech.OnInitListener {
 
     private fun startListening() {
         if (isSpeaking || isListening) return
+
+        // Jab Instagram Reels, YouTube ya koi video/audio chal raha ho to mic ko pause rakho
+        if (audioManager.isMusicActive && !isAwakeForCommand) {
+            sendHudUpdate("MEDIA PLAYING — MIC PAUSED", "Video/Audio chal raha hai, mic standby mein paused hai...", "SLEEP")
+            restartListening(2500)
+            return
+        }
+
         isListening = true
         muteBeep(true)
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
@@ -192,25 +208,25 @@ class JarvisService : Service(), TextToSpeech.OnInitListener {
             }
             cmd.contains("instagram") || cmd.contains("insta") -> {
                 openApp("com.instagram.android", "https://www.instagram.com/")
-                goToSleep("Instagram open kar raha hoon.")
+                goToSleep("Instagram open kar raha hoon.", pauseAfterMs = 4500)
             }
             cmd.contains("youtube") -> {
                 openApp("com.google.android.youtube", "https://www.youtube.com/")
-                goToSleep("YouTube open kar raha hoon.")
+                goToSleep("YouTube open kar raha hoon.", pauseAfterMs = 4500)
             }
             cmd.contains("whatsapp") -> {
                 openApp("com.whatsapp", "https://wa.me/")
-                goToSleep("WhatsApp open kar raha hoon.")
+                goToSleep("WhatsApp open kar raha hoon.", pauseAfterMs = 4000)
             }
             cmd.contains("gmail") || cmd.contains("email") -> {
                 openApp("com.google.android.gm", "https://mail.google.com/")
-                goToSleep("Gmail open kar raha hoon.")
+                goToSleep("Gmail open kar raha hoon.", pauseAfterMs = 4000)
             }
             cmd.contains("camera") -> {
                 val intent = Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE)
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 startActivity(intent)
-                goToSleep("Camera open kar raha hoon.")
+                goToSleep("Camera open kar raha hoon.", pauseAfterMs = 4000)
             }
             cmd.contains("volume") && (cmd.contains("up") || cmd.contains("badha") || cmd.contains("tez") || cmd.contains("full")) -> {
                 audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_RAISE, AudioManager.FLAG_SHOW_UI)
@@ -321,7 +337,7 @@ class JarvisService : Service(), TextToSpeech.OnInitListener {
                     val callIntent = Intent(Intent.ACTION_CALL, Uri.parse("tel:$number"))
                     callIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     startActivity(callIntent)
-                    goToSleep("$name ko call laga raha hoon.")
+                    goToSleep("$name ko call laga raha hoon.", pauseAfterMs = 5000)
                     return
                 }
             }
@@ -330,11 +346,17 @@ class JarvisService : Service(), TextToSpeech.OnInitListener {
     }
 
     private fun askGeminiAndSleep(question: String) {
+        val key = getApiKey()
+        if (!key.startsWith("AIza")) {
+            goToSleep("Pehle Jarvis app mein SET GEMINI API KEY button dabakar apni AIzaSy wali API key save kijiye sir.")
+            return
+        }
+
         isSpeaking = true
         speechRecognizer.cancel()
         sendHudUpdate("THINKING...", "Sawaal: $question", "SPEAKING")
 
-        val url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=$apiKey"
+        val url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=$key"
         val prompt = "Tum Jarvis Pro AI assistant ho. User ke kisi bhi sawaal ka exact aur clear jawaab 2 se 3 chhoti lines mein natural Hinglish mein do. Koi emoji ya symbol mat lagana. Sawaal: $question"
 
         val jsonBody = JSONObject().put(
@@ -361,7 +383,7 @@ class JarvisService : Service(), TextToSpeech.OnInitListener {
                     val cleanReply = rawReply.replace(Regex("[*#`_]"), "").trim()
                     goToSleep(cleanReply)
                 } catch (e: Exception) {
-                    goToSleep("Jawaab generate karne mein dikkat aayi, API key check kijiye sir.")
+                    goToSleep("Jawaab nahi aaya, SET GEMINI API KEY mein valid key check kijiye sir.")
                 }
             }
         })
@@ -390,7 +412,7 @@ class JarvisService : Service(), TextToSpeech.OnInitListener {
         }
     }
 
-    private fun goToSleep(spokenText: String, hudMessage: String = spokenText) {
+    private fun goToSleep(spokenText: String, hudMessage: String = spokenText, pauseAfterMs: Long = 1600) {
         mainHandler.post {
             isSpeaking = true
             isListening = false
@@ -405,12 +427,12 @@ class JarvisService : Service(), TextToSpeech.OnInitListener {
                 override fun onDone(utteranceId: String?) {
                     isSpeaking = false
                     sendHudUpdate("SLEEP MODE — SAY 'JARVIS'", hudMessage, "SLEEP")
-                    restartListening(1500)
+                    restartListening(pauseAfterMs)
                 }
                 override fun onError(utteranceId: String?) {
                     isSpeaking = false
                     sendHudUpdate("SLEEP MODE — SAY 'JARVIS'", hudMessage, "SLEEP")
-                    restartListening(1500)
+                    restartListening(pauseAfterMs)
                 }
             })
 

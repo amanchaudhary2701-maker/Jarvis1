@@ -2,6 +2,7 @@ package com.example.jarvisai
 
 import android.Manifest
 import android.animation.ValueAnimator
+import android.app.AlertDialog
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -15,9 +16,11 @@ import android.view.Gravity
 import android.view.View
 import android.view.animation.LinearInterpolator
 import android.widget.Button
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import kotlin.math.cos
@@ -33,7 +36,7 @@ class MainActivity : AppCompatActivity() {
     private val hudReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             val status = intent?.getStringExtra("status") ?: return
-            val message = intent?.getStringExtra("message") ?: ""
+            val message = intent.getStringExtra("message") ?: ""
             val state = intent?.getStringExtra("state") ?: "SLEEP"
 
             statusText.text = status
@@ -62,12 +65,12 @@ class MainActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
             setBackgroundColor(Color.parseColor("#020617"))
-            setPadding(48, 70, 48, 48)
+            setPadding(44, 64, 44, 44)
         }
 
         val title = TextView(this).apply {
             text = "J.A.R.V.I.S  PRO"
-            textSize = 26f
+            textSize = 25f
             setTextColor(Color.parseColor("#00F5FF"))
             typeface = Typeface.DEFAULT_BOLD
             letterSpacing = 0.25f
@@ -80,31 +83,31 @@ class MainActivity : AppCompatActivity() {
             setTextColor(Color.parseColor("#67E8F9"))
             letterSpacing = 0.12f
             gravity = Gravity.CENTER
-            setPadding(0, 10, 0, 16)
+            setPadding(0, 8, 0, 12)
         }
 
         orbView = JarvisPro3DHudView(this).apply {
-            layoutParams = LinearLayout.LayoutParams(680, 680)
+            layoutParams = LinearLayout.LayoutParams(620, 620)
         }
 
         val scrollBox = ScrollView(this).apply {
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
-                320
+                300
             ).apply {
-                topMargin = 14
-                bottomMargin = 22
+                topMargin = 10
+                bottomMargin = 18
             }
             background = GradientDrawable().apply {
                 setColor(Color.parseColor("#0B1324"))
                 setStroke(2, Color.parseColor("#1E3A5F"))
                 cornerRadius = 24f
             }
-            setPadding(24, 20, 24, 20)
+            setPadding(24, 18, 24, 18)
         }
 
         responseText = TextView(this).apply {
-            text = "Boliye 'Jarvis' aur koi bhi sawaal puchiye ya 'Jarvis phone ka analysis karo' boliye."
+            text = "Boliye 'Jarvis' aur koi bhi sawaal puchiye. Video/Reels chalte waqt mic apne aap pause rahega."
             textSize = 14f
             setTextColor(Color.parseColor("#E2E8F0"))
         }
@@ -117,11 +120,11 @@ class MainActivity : AppCompatActivity() {
             typeface = Typeface.DEFAULT_BOLD
             background = GradientDrawable().apply {
                 setColor(Color.parseColor("#00F5FF"))
-                cornerRadius = 44f
+                cornerRadius = 42f
             }
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
-                126
+                120
             )
             setOnClickListener {
                 startForegroundService(Intent(this@MainActivity, JarvisService::class.java))
@@ -130,12 +133,12 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        val btnRow = LinearLayout(this).apply {
+        val row1 = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
-                114
-            ).apply { topMargin = 20 }
+                108
+            ).apply { topMargin = 16 }
         }
 
         val stopBtn = Button(this).apply {
@@ -146,10 +149,10 @@ class MainActivity : AppCompatActivity() {
             background = GradientDrawable().apply {
                 setColor(Color.parseColor("#0B1324"))
                 setStroke(2, Color.parseColor("#FF4D6D"))
-                cornerRadius = 40f
+                cornerRadius = 38f
             }
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f).apply {
-                marginEnd = 10
+                marginEnd = 8
             }
             setOnClickListener {
                 stopService(Intent(this@MainActivity, JarvisService::class.java))
@@ -167,11 +170,10 @@ class MainActivity : AppCompatActivity() {
             background = GradientDrawable().apply {
                 setColor(Color.parseColor("#0B1324"))
                 setStroke(2, Color.parseColor("#A855F7"))
-                cornerRadius = 40f
+                cornerRadius = 38f
             }
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f).apply {
-                marginStart = 5
-                marginEnd = 5
+                marginStart = 8
             }
             setOnClickListener {
                 val intent = Intent(this@MainActivity, JarvisService::class.java).apply {
@@ -179,6 +181,33 @@ class MainActivity : AppCompatActivity() {
                 }
                 startForegroundService(intent)
             }
+        }
+
+        row1.addView(stopBtn)
+        row1.addView(analyzeBtn)
+
+        val row2 = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                108
+            ).apply { topMargin = 14 }
+        }
+
+        val apiKeyBtn = Button(this).apply {
+            text = "SET GEMINI API KEY"
+            setTextColor(Color.parseColor("#22C55E"))
+            textSize = 12f
+            typeface = Typeface.DEFAULT_BOLD
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#0B1324"))
+                setStroke(2, Color.parseColor("#22C55E"))
+                cornerRadius = 38f
+            }
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f).apply {
+                marginEnd = 8
+            }
+            setOnClickListener { showApiKeyDialog() }
         }
 
         val adminBtn = Button(this).apply {
@@ -189,10 +218,10 @@ class MainActivity : AppCompatActivity() {
             background = GradientDrawable().apply {
                 setColor(Color.parseColor("#0B1324"))
                 setStroke(2, Color.parseColor("#38BDF8"))
-                cornerRadius = 40f
+                cornerRadius = 38f
             }
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f).apply {
-                marginStart = 10
+                marginStart = 8
             }
             setOnClickListener {
                 val adminUrl = "https://amanchaudhary2701-maker.github.io/Jarvis1/admin.html"
@@ -200,17 +229,37 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        btnRow.addView(stopBtn)
-        btnRow.addView(analyzeBtn)
-        btnRow.addView(adminBtn)
+        row2.addView(apiKeyBtn)
+        row2.addView(adminBtn)
 
         root.addView(title)
         root.addView(statusText)
         root.addView(orbView)
         root.addView(scrollBox)
         root.addView(startBtn)
-        root.addView(btnRow)
+        root.addView(row1)
+        root.addView(row2)
         setContentView(root)
+    }
+
+    private fun showApiKeyDialog() {
+        val prefs = getSharedPreferences("jarvis_prefs", Context.MODE_PRIVATE)
+        val input = EditText(this).apply {
+            hint = "AIzaSy... (Google AI Studio API Key)"
+            setText(prefs.getString("gemini_api_key", ""))
+            setPadding(36, 28, 36, 28)
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Gemini API Key Save Karein")
+            .setMessage("aistudio.google.com se apni AIzaSy... wali API key yahan paste karein:")
+            .setView(input)
+            .setPositiveButton("Save") { _, _ ->
+                val key = input.text.toString().trim()
+                prefs.edit().putString("gemini_api_key", key).apply()
+                Toast.makeText(this, "Gemini API Key save ho gayi!", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     override fun onResume() {
