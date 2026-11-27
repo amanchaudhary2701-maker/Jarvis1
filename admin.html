@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>J.A.R.V.I.S PRO — Admin Panel</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <style>
+    :root {
+      --bg: #030712;
+      --card: #0f172a;
+      --border: #1e3a5f;
+      --cyan: #00f5ff;
+      --blue: #38bdf8;
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --green: #22c55e;
+      --red: #f43f5e;
+    }
+    * { box-sizing: border-box; font-family: 'Segoe UI', system-ui, sans-serif; }
+    body {
+      margin: 0; padding: 20px; background: var(--bg); color: var(--text);
+      min-height: 100vh; display: flex; justify-content: center;
+    }
+    .container { width: 100%; max-width: 540px; }
+    .header { text-align: center; margin-bottom: 22px; }
+    .header h1 {
+      margin: 0; color: var(--cyan); letter-spacing: 4px; font-size: 24px;
+      text-shadow: 0 0 18px rgba(0, 245, 255, 0.4);
+    }
+    .header p { margin: 6px 0 0; color: var(--muted); font-size: 13px; }
+    .card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 16px; padding: 18px; margin-bottom: 16px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+    }
+    .card h2 {
+      margin: 0 0 12px; font-size: 15px; color: var(--blue);
+      letter-spacing: 1px; text-transform: uppercase;
+    }
+    label { display: block; font-size: 12px; color: var(--muted); margin: 10px 0 5px; }
+    input[type="text"], input[type="password"] {
+      width: 100%; padding: 11px 12px; border-radius: 10px;
+      border: 1px solid #334155; background: #020617; color: #fff; font-size: 14px;
+    }
+    .row { display: flex; gap: 10px; }
+    .row > div { flex: 1; }
+    .drop-zone {
+      border: 2px dashed var(--blue); border-radius: 14px; padding: 28px 16px;
+      text-align: center; cursor: pointer; background: rgba(56, 189, 248, 0.05);
+      transition: 0.2s;
+    }
+    .drop-zone:hover { background: rgba(0, 245, 255, 0.1); border-color: var(--cyan); }
+    .drop-zone input { display: none; }
+    .btn {
+      width: 100%; padding: 13px; border: none; border-radius: 12px;
+      font-weight: 700; font-size: 14px; cursor: pointer; margin-top: 12px;
+      transition: 0.2s; letter-spacing: 0.5px;
+    }
+    .btn-primary { background: var(--cyan); color: #030712; }
+    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-outline {
+      background: transparent; color: var(--blue); border: 1px solid var(--blue);
+    }
+    .file-list {
+      max-height: 150px; overflow-y: auto; margin-top: 12px;
+      font-size: 12px; color: var(--muted); background: #020617;
+      padding: 10px; border-radius: 10px; display: none;
+    }
+    .log {
+      background: #020617; border: 1px solid #1e293b; border-radius: 10px;
+      padding: 12px; font-family: monospace; font-size: 12px;
+      max-height: 180px; overflow-y: auto; white-space: pre-wrap; color: #a5f3fc;
+      margin-top: 12px;
+    }
+    .status-badge {
+      display: inline-block; padding: 4px 10px; border-radius: 20px;
+      font-size: 12px; font-weight: 700; margin-top: 6px;
+    }
+    .ok { background: rgba(34, 197, 94, 0.15); color: var(--green); }
+    .warn { background: rgba(56, 189, 248, 0.15); color: var(--blue); }
+    .err { background: rgba(244, 63, 94, 0.15); color: var(--red); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>J.A.R.V.I.S PRO</h1>
+      <p>ZIP Auto-Update & APK Build Admin Panel</p>
+    </div>
+
+    <div class="card">
+      <h2>1. GitHub Connection</h2>
+      <div class="row">
+        <div>
+          <label>GitHub Username</label>
+          <input id="owner" type="text" value="amanchaudhary2701-maker" />
+        </div>
+        <div>
+          <label>Repository</label>
+          <input id="repo" type="text" value="Jarvis1" />
+        </div>
+      </div>
+      <label>GitHub Personal Access Token (Sirf ek baar save hoga)</label>
+      <input id="token" type="password" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx" />
+      <button class="btn btn-outline" onclick="saveConfig()">Save Connection</button>
+    </div>
+
+    <div class="card">
+      <h2>2. Upload Update ZIP</h2>
+      <label class="drop-zone" id="dropZone">
+        <input type="file" id="zipInput" accept=".zip" />
+        <strong style="color:#00f5ff; font-size:15px;">Tap karke ZIP file select karo</strong>
+        <div style="font-size:12px; color:#94a3b8; margin-top:6px;">
+          ZIP ke andar updated files (MainActivity.kt, JarvisService.kt, etc.) honi chahiye
+        </div>
+      </label>
+      <div id="fileList" class="file-list"></div>
+      <button id="deployBtn" class="btn btn-primary" onclick="deployZip()" disabled>
+        UPLOAD ZIP & AUTO-UPDATE JARVIS
+      </button>
+      <div id="logBox" class="log">Ready. Pehle Token save karo, phir ZIP select karo.</div>
+    </div>
+
+    <div class="card">
+      <h2>3. Live APK Build Status</h2>
+      <div id="buildInfo" style="font-size:13px; color:#94a3b8;">
+        Status check karne ke liye neeche button dabao.
+      </div>
+      <button class="btn btn-outline" onclick="checkBuildStatus()">Refresh Build Status</button>
+    </div>
+  </div>
+
+  <script>
+    let parsedFiles = [];
+
+    window.onload = () => {
+      if (localStorage.getItem("jarvis_owner")) document.getElementById("owner").value = localStorage.getItem("jarvis_owner");
+      if (localStorage.getItem("jarvis_repo")) document.getElementById("repo").value = localStorage.getItem("jarvis_repo");
+      if (localStorage.getItem("jarvis_token")) document.getElementById("token").value = localStorage.getItem("jarvis_token");
+    };
+
+    function log(msg) {
+      const box = document.getElementById("logBox");
+      box.textContent += "\n> " + msg;
+      box.scrollTop = box.scrollHeight;
+    }
+
+    function saveConfig() {
+      localStorage.setItem("jarvis_owner", document.getElementById("owner").value.trim());
+      localStorage.setItem("jarvis_repo", document.getElementById("repo").value.trim());
+      localStorage.setItem("jarvis_token", document.getElementById("token").value.trim());
+      log("GitHub connection phone mein save ho gaya.");
+      checkBuildStatus();
+    }
+
+    document.getElementById("zipInput").addEventListener("change", async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      parsedFiles = [];
+      const listEl = document.getElementById("fileList");
+      listEl.style.display = "block";
+      listEl.innerHTML = "ZIP padh raha hoon...";
+
+      try {
+        const zip = await JSZip.loadAsync(file);
+        const rawEntries = [];
+        zip.forEach((relPath, zipEntry) => {
+          if (!zipEntry.dir && !relPath.startsWith("__MACOSX/") && !relPath.endsWith(".DS_Store")) {
+            rawEntries.push({ path: relPath, entry: zipEntry });
+          }
+        });
+
+        // Agar sabhi files ek single top-level folder ke andar hain to prefix hatao
+        const firstParts = new Set(rawEntries.map(f => f.path.split("/")[0]));
+        const stripPrefix = firstParts.size === 1 && rawEntries.every(f => f.path.includes("/"));
+        const prefix = stripPrefix ? [...firstParts][0] + "/" : "";
+
+        for (const item of rawEntries) {
+          const cleanPath = stripPrefix ? item.path.slice(prefix.length) : item.path;
+          const base64 = await item.entry.async("base64");
+          parsedFiles.push({ path: cleanPath, base64 });
+        }
+
+        listEl.innerHTML = `<strong>${parsedFiles.length} files mili:</strong><br>` +
+          parsedFiles.map(f => "• " + f.path).join("<br>");
+        document.getElementById("deployBtn").disabled = parsedFiles.length === 0;
+        log(`ZIP ready: ${parsedFiles.length} files update ke liye तैयार hain.`);
+      } catch (err) {
+        log("ZIP read error: " + err.message);
+      }
+    });
+
+    async function ghFetch(endpoint, method = "GET", body = null) {
+      const token = document.getElementById("token").value.trim();
+      const headers = {
+        "Authorization": `Bearer ${token}`,
+        "Accept": "application/vnd.github+json",
+        "Content-Type": "application/json"
+      };
+      const res = await fetch(`https://api.github.com${endpoint}`, {
+        method, headers, body: body ? JSON.stringify(body) : null
+      });
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(`${res.status}: ${txt}`);
+      }
+      return res.json();
+    }
+
+    async function deployZip() {
+      const owner = document.getElementById("owner").value.trim();
+      const repo = document.getElementById("repo").value.trim();
+      const token = document.getElementById("token").value.trim();
+      if (!token) return alert("Pehle GitHub Personal Access Token daalo!");
+
+      const btn = document.getElementById("deployBtn");
+      btn.disabled = true;
+      log("Update start ho raha hai...");
+
+      try {
+        // 1. Latest main commit SHA lo
+        const refData = await ghFetch(`/repos/${owner}/${repo}/git/ref/heads/main`);
+        const latestCommitSha = refData.object.sha;
+        const commitData = await ghFetch(`/repos/${owner}/${repo}/git/commits/${latestCommitSha}`);
+        const baseTreeSha = commitData.tree.sha;
+
+        // 2. Har file ka blob banao
+        const treeItems = [];
+        for (let i = 0; i < parsedFiles.length; i++) {
+          const f = parsedFiles[i];
+          log(`Uploading (${i + 1}/${parsedFiles.length}): ${f.path}`);
+          const blob = await ghFetch(`/repos/${owner}/${repo}/git/blobs`, "POST", {
+            content: f.base64,
+            encoding: "base64"
+          });
+          treeItems.push({ path: f.path, mode: "100644", type: "blob", sha: blob.sha });
+        }
+
+        // 3. Single tree + commit + push
+        log("Single commit create kar raha hoon...");
+        const newTree = await ghFetch(`/repos/${owner}/${repo}/git/trees`, "POST", {
+          base_tree: baseTreeSha,
+          tree: treeItems
+        });
+
+        const newCommit = await ghFetch(`/repos/${owner}/${repo}/git/commits`, "POST", {
+          message: `Jarvis Admin Panel ZIP Update (${parsedFiles.length} files)`,
+          tree: newTree.sha,
+          parents: [latestCommitSha]
+        });
+
+        await ghFetch(`/repos/${owner}/${repo}/git/refs/heads/main`, "PATCH", {
+          sha: newCommit.sha
+        });
+
+        log("SUCCESS! Saari files push ho gayi aur APK build start ho gaya hai.");
+        setTimeout(checkBuildStatus, 4000);
+      } catch (err) {
+        log("ERROR: " + err.message);
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    async function checkBuildStatus() {
+      const owner = document.getElementById("owner").value.trim();
+      const repo = document.getElementById("repo").value.trim();
+      const info = document.getElementById("buildInfo");
+      try {
+        const data = await ghFetch(`/repos/${owner}/${repo}/actions/runs?per_page=5`);
+        const apkRun = data.workflow_runs.find(r => r.name === "Build Jarvis APK") || data.workflow_runs[0];
+        if (!apkRun) {
+          info.innerHTML = "Koi build run nahi mila.";
+          return;
+        }
+        const badgeClass = apkRun.conclusion === "success" ? "ok" : (apkRun.status === "completed" ? "err" : "warn");
+        const statusLabel = apkRun.conclusion ? apkRun.conclusion.toUpperCase() : apkRun.status.toUpperCase();
+        info.innerHTML = `
+          <div><strong>${apkRun.display_title}</strong></div>
+          <span class="status-badge ${badgeClass}">${statusLabel}</span>
+          <div style="margin-top:10px;">
+            <a href="${apkRun.html_url}" target="_blank" style="color:#00f5ff; text-decoration:none; font-weight:700;">
+              Open Build & Download APK →
+            </a>
+          </div>
+        `;
+      } catch (err) {
+        info.innerHTML = "Status load nahi hua (Token check karo): " + err.message;
+      }
+    }
+  </script>
+</body>
+</html>
